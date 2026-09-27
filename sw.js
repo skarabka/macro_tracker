@@ -1,4 +1,4 @@
-const CACHE='macro-tracker-v13';
+const CACHE='macro-tracker-v14';
 const ASSETS=['./','index.html','styles.css','app.js','config.js','manifest.webmanifest','icon.svg'];
 
 self.addEventListener('install',e=>{
