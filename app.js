@@ -75,9 +75,11 @@ async function bootstrapFromServer(){
   try{
     const r = await api('bootstrap');
     if(!r.ok) throw new Error(r.error || 'Bootstrap failed');
-    const serverEntries=(r.entries||[]).map(normalizeEntry);
-    const pendingIds=new Set(loadPending().map(x=>x.entry?.id).filter(Boolean));
-    const localPending=loadEntries().filter(x=>pendingIds.has(x.id));
+    const q=loadPending();
+    const pendingIds=new Set(q.map(x=>x.payload?.entry?.id).filter(Boolean));
+    const pendingDeleteIds=new Set(q.filter(x=>x.action==='delete_food').map(x=>x.payload?.id).filter(Boolean));
+    const serverEntries=(r.entries||[]).map(normalizeEntry).filter(x=>!pendingDeleteIds.has(x.id));
+    const localPending=loadEntries().filter(x=>pendingIds.has(x.id) && !pendingDeleteIds.has(x.id));
     const merged=new Map();
     [...serverEntries,...localPending].forEach(x=>merged.set(x.id,x));
     saveEntries([...merged.values()]);
@@ -350,6 +352,7 @@ function openEditEntry(id){
   $('calculateNote').textContent='Зміни вагу або назву й натисни «Порахувати», щоб AI оновив kcal та БЖВ.';
   $('saveFood').hidden=false;
   $('saveFood').textContent='Підтвердити';
+  $('deleteFood').hidden=false;
   $('addDialog').showModal();
 }
 
@@ -384,7 +387,7 @@ document.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',
   document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.dataset.screen===btn.dataset.target));
 }));
 document.querySelectorAll('.mode-tab').forEach(btn=>btn.addEventListener('click',()=>setMode(btn.dataset.mode)));
-$('openAdd').addEventListener('click',()=>{ editingEntryId=null; $('foodForm').reset(); photoDataUrl=''; photoIdentified=false; nutritionCalculated=false; $('foodDialogTitle').textContent='Додати їжу'; $('modeTabs').hidden=false; $('photoPreview').hidden=true; $('aiNote').textContent='Після фото AI визначить назву та запропонує вагу.'; setMode('photo'); $('addDialog').showModal(); });
+$('openAdd').addEventListener('click',()=>{ editingEntryId=null; $('deleteFood').hidden=true; $('foodForm').reset(); photoDataUrl=''; photoIdentified=false; nutritionCalculated=false; $('foodDialogTitle').textContent='Додати їжу'; $('modeTabs').hidden=false; $('photoPreview').hidden=true; $('aiNote').textContent='Після фото AI визначить назву та запропонує вагу.'; setMode('photo'); $('addDialog').showModal(); });
 $('openSettings').addEventListener('click',()=>$('settingsDialog').showModal());
 $('closeAdd').addEventListener('click',()=>$('addDialog').close());
 $('closeSettings').addEventListener('click',()=>$('settingsDialog').close());
@@ -401,6 +404,25 @@ document.addEventListener('keydown',e=>{
   e.preventDefault();
   openEditEntry(card.dataset.entryId);
 });
+$('deleteFood').addEventListener('click',async ()=>{
+  if(!editingEntryId) return;
+  const entry=loadEntries().map(normalizeEntry).find(x=>x.id===editingEntryId);
+  if(!entry) return;
+  if(!confirm(`Видалити «${entry.meal_name}»? Цю дію не можна скасувати.`)) return;
+
+  const id=editingEntryId;
+  const entries=loadEntries().filter(x=>String(x.id)!==id);
+  saveEntries(entries);
+
+  if(hasBackend()) queueAction('delete_food',{id});
+
+  editingEntryId=null;
+  $('deleteFood').hidden=true;
+  $('addDialog').close();
+  render();
+  await flushPending();
+});
+
 ['mealName','weightG'].forEach(id=>$(id).addEventListener('input',()=>{
   if(nutritionCalculated) clearNutritionEstimate();
   updateCalculateState();
