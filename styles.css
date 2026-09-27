@@ -4,6 +4,7 @@
   --radius:22px;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html{background:var(--bg);color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,"SF Pro Display",Segoe UI,sans-serif}
 body{margin:0;background:var(--bg);min-height:100vh}
 button,input{font:inherit}
