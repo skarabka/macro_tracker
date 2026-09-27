@@ -5,7 +5,8 @@ const PENDING = 'bzhv_tracker_pending_v1';
 const defaultSettings = { kcal: 0, protein: 0, fat: 0, carbs: 0 };
 let photoDataUrl = '';
 let syncing = false;
-let manualAnalyzed = false;
+let nutritionCalculated = false;
+let photoIdentified = false;
 
 function loadJson(key, fallback){
   try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
@@ -142,18 +143,43 @@ function applyNutritionAnalysis(a){
   if(a.assumptions) $('comment').value=a.assumptions;
 }
 
-async function analyzeManualFood(){
+function clearNutritionEstimate(){
+  nutritionCalculated=false;
+  $('nutritionFields').hidden=true;
+  $('saveFood').hidden=true;
+  $('kcal').value='';
+  $('protein').value='';
+  $('fat').value='';
+  $('carbs').value='';
+  $('comment').value='';
+}
+
+function updateCalculateState(){
+  const mode=$('inputType').value;
+  const hasBasics=Boolean($('mealName').value.trim()) && Number($('weightG').value)>0;
+  const ready=mode==='manual' ? hasBasics : (photoIdentified && hasBasics);
+  $('calculateFood').hidden=!ready;
+  if(mode==='manual'){
+    $('calculateNote').hidden=false;
+    if(!nutritionCalculated) $('calculateNote').textContent='Введи назву продукту або страви та вагу — AI оцінить калорії та БЖВ.';
+  }else if(photoIdentified){
+    $('calculateNote').hidden=false;
+    if(!nutritionCalculated) $('calculateNote').textContent='Перевір назву та вагу. За потреби скоригуй вагу й натисни «Порахувати».';
+  }
+}
+
+async function calculateNutrition(){
   if(!hasBackend()) return;
   const mealName=$('mealName').value.trim();
   const weightG=Number($('weightG').value);
-  const note=$('manualAiNote');
+  const note=$('calculateNote');
   if(!mealName || !weightG || weightG<=0){
     note.hidden=false;
     note.textContent='Вкажи назву та вагу більше 0 г.';
     return;
   }
 
-  const btn=$('calculateManual');
+  const btn=$('calculateFood');
   btn.disabled=true;
   btn.textContent='Рахую…';
   note.hidden=false;
@@ -163,7 +189,7 @@ async function analyzeManualFood(){
     if(!r.ok) throw new Error(r.error||'AI analysis failed');
     const a=r.analysis||{};
     applyNutritionAnalysis(a);
-    manualAnalyzed=true;
+    nutritionCalculated=true;
     $('nutritionFields').hidden=false;
     $('saveFood').hidden=false;
     const confidence=Number(a.confidence);
@@ -171,44 +197,42 @@ async function analyzeManualFood(){
     note.textContent=`AI порахував оцінку${confidenceText}. Перевір значення та підтвердь.`;
   }catch(err){
     console.warn(err);
-    manualAnalyzed=false;
-    $('nutritionFields').hidden=true;
-    $('saveFood').hidden=true;
+    clearNutritionEstimate();
+    note.hidden=false;
     note.textContent=`AI-аналіз не вдався: ${err.message || err}`;
   }finally{
     btn.disabled=false;
     btn.textContent='Порахувати';
+    updateCalculateState();
   }
 }
 
-function resetManualEstimate(){
-  manualAnalyzed=false;
-  $('nutritionFields').hidden=true;
-  $('saveFood').hidden=true;
-  $('kcal').value='';
-  $('protein').value='';
-  $('fat').value='';
-  $('carbs').value='';
-  $('comment').value='';
-  $('manualAiNote').hidden=false;
-  $('manualAiNote').textContent='Введи назву продукту або страви та вагу — AI оцінить калорії та БЖВ.';
-}
-
-async function analyzeCurrentPhoto(){
+async function identifyCurrentPhoto(){
   if(!photoDataUrl || !hasBackend()) return;
   const note=$('aiNote');
-  note.textContent='AI аналізує фото…';
+  note.textContent='AI визначає страву та вагу…';
+  photoIdentified=false;
+  clearNutritionEstimate();
+  $('calculateFood').hidden=true;
+  $('calculateNote').hidden=true;
   try{
-    const r=await api('analyze_photo',{imageDataUrl:photoDataUrl,mode:$('inputType').value});
-    if(!r.ok) throw new Error(r.error||'AI analysis failed');
+    const r=await api('identify_photo',{imageDataUrl:photoDataUrl,mode:$('inputType').value});
+    if(!r.ok) throw new Error(r.error||'Photo identification failed');
     const a=r.analysis||{};
-    applyNutritionAnalysis(a);
+    if(a.meal_name) $('mealName').value=a.meal_name;
+    if(Number(a.weight_g)>0) $('weightG').value=Math.round(Number(a.weight_g));
+    photoIdentified=true;
     const confidence=Number(a.confidence);
     const confidenceText=Number.isFinite(confidence)?` · впевненість ${Math.round(confidence*100)}%`:'';
-    note.textContent=`AI заповнив оцінку${confidenceText}. Перевір значення перед збереженням.`;
+    note.textContent=`AI визначив назву та орієнтовну вагу${confidenceText}.`;
+    updateCalculateState();
   }catch(err){
     console.warn(err);
-    note.textContent=`AI-аналіз не вдався: ${err.message || err}. Можна заповнити БЖВ вручну.`;
+    note.textContent=`Не вдалося розпізнати фото: ${err.message || err}`;
+    $('calculateNote').hidden=false;
+    $('calculateNote').textContent='Можеш ввести назву та вагу вручну, після чого натиснути «Порахувати».';
+    photoIdentified=true;
+    updateCalculateState();
   }
 }
 
@@ -264,35 +288,42 @@ function setMode(mode){
   $('inputType').value=mode;
   document.querySelectorAll('.mode-tab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
   const manual=mode==='manual';
-  const photo=!manual;
-  $('photoBlock').style.display=photo?'block':'none';
-  $('calculateManual').hidden=!manual;
-  $('manualAiNote').hidden=!manual;
-  $('saveFood').textContent=manual?'Підтвердити':'Зберегти';
-  $('photoPrompt').textContent = mode==='label'?'Сфотографувати етикетку':'Сфотографувати страву';
+  $('photoBlock').style.display=manual?'none':'block';
+  $('photoPrompt').textContent=mode==='label'?'Сфотографувати етикетку':'Сфотографувати страву';
+  $('saveFood').textContent='Підтвердити';
+
+  nutritionCalculated=false;
+  photoIdentified=manual;
+  $('nutritionFields').hidden=true;
+  $('saveFood').hidden=true;
+  $('calculateFood').hidden=true;
+  $('calculateNote').hidden=false;
+  $('kcal').value='';
+  $('protein').value='';
+  $('fat').value='';
+  $('carbs').value='';
+  $('comment').value='';
 
   if(manual){
-    resetManualEstimate();
+    $('calculateNote').textContent='Введи назву продукту або страви та вагу — AI оцінить калорії та БЖВ.';
   }else{
-    manualAnalyzed=false;
-    $('nutritionFields').hidden=false;
-    $('saveFood').hidden=false;
+    $('calculateNote').textContent='Спочатку зроби фото — AI визначить назву та запропонує вагу.';
   }
 }
-
 document.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>{
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
   document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.dataset.screen===btn.dataset.target));
 }));
 document.querySelectorAll('.mode-tab').forEach(btn=>btn.addEventListener('click',()=>setMode(btn.dataset.mode)));
-$('openAdd').addEventListener('click',()=>{ $('foodForm').reset(); photoDataUrl=''; $('photoPreview').hidden=true; $('aiNote').textContent='Після фото AI запропонує назву, вагу, калорії та БЖВ. Перед збереженням усе можна змінити.'; setMode('photo'); $('addDialog').showModal(); });
+$('openAdd').addEventListener('click',()=>{ $('foodForm').reset(); photoDataUrl=''; photoIdentified=false; nutritionCalculated=false; $('photoPreview').hidden=true; $('aiNote').textContent='Після фото AI визначить назву та запропонує вагу.'; setMode('photo'); $('addDialog').showModal(); });
 $('openSettings').addEventListener('click',()=>$('settingsDialog').showModal());
 $('closeAdd').addEventListener('click',()=>$('addDialog').close());
 $('closeSettings').addEventListener('click',()=>$('settingsDialog').close());
 $('retrySync').addEventListener('click',()=>bootstrapFromServer());
-$('calculateManual').addEventListener('click',()=>analyzeManualFood());
+$('calculateFood').addEventListener('click',()=>calculateNutrition());
 ['mealName','weightG'].forEach(id=>$(id).addEventListener('input',()=>{
-  if($('inputType').value==='manual' && manualAnalyzed) resetManualEstimate();
+  if(nutritionCalculated) clearNutritionEstimate();
+  updateCalculateState();
 }));
 
 $('photoInput').addEventListener('change',async e=>{
@@ -302,14 +333,14 @@ $('photoInput').addEventListener('change',async e=>{
     photoDataUrl=await compressImage(file);
     $('photoPreview').src=photoDataUrl; $('photoPreview').hidden=false;
     $('photoPrompt').textContent=$('inputType').value==='label'?'Замінити фото етикетки':'Замінити фото страви';
-    await analyzeCurrentPhoto();
+    await identifyCurrentPhoto();
   }catch(err){ alert('Не вдалося обробити фото. Спробуй інше.'); }
 });
 
 $('foodForm').addEventListener('submit',async e=>{
   e.preventDefault();
-  if($('inputType').value==='manual' && !manualAnalyzed){
-    await analyzeManualFood();
+  if(!nutritionCalculated){
+    await calculateNutrition();
     return;
   }
   const now=new Date();
