@@ -108,13 +108,19 @@
 
       <label>Назва<input id="mealName" required placeholder="Напр. омлет з овочами" /></label>
       <label>Вага, г<input id="weightG" inputmode="decimal" type="number" min="0" step="1" placeholder="250" /></label>
-      <div class="field-grid">
-        <label>kcal<input id="kcal" inputmode="decimal" type="number" min="0" step="1" required /></label>
-        <label>Білки, г<input id="protein" inputmode="decimal" type="number" min="0" step="0.1" required /></label>
-        <label>Жири, г<input id="fat" inputmode="decimal" type="number" min="0" step="0.1" required /></label>
-        <label>Вуглеводи, г<input id="carbs" inputmode="decimal" type="number" min="0" step="0.1" required /></label>
+
+      <button class="primary calculate-food" id="calculateManual" type="button" hidden>Порахувати</button>
+      <div class="ai-note" id="manualAiNote" hidden>Введи назву продукту або страви та вагу — AI оцінить калорії та БЖВ.</div>
+
+      <div id="nutritionFields">
+        <div class="field-grid">
+          <label>kcal<input id="kcal" inputmode="decimal" type="number" min="0" step="1" required /></label>
+          <label>Білки, г<input id="protein" inputmode="decimal" type="number" min="0" step="0.1" required /></label>
+          <label>Жири, г<input id="fat" inputmode="decimal" type="number" min="0" step="0.1" required /></label>
+          <label>Вуглеводи, г<input id="carbs" inputmode="decimal" type="number" min="0" step="0.1" required /></label>
+        </div>
+        <label>Коментар<input id="comment" placeholder="Необов’язково" /></label>
       </div>
-      <label>Коментар<input id="comment" placeholder="Необов’язково" /></label>
       <button class="primary" id="saveFood" value="default">Зберегти</button>
     </form>
   </dialog>
