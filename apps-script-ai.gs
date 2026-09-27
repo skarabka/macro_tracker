@@ -2,7 +2,7 @@ const SPREADSHEET_ID = '1-o6k-9UKY5vxI4Swmt6K4Ugj1ifE28-KWEU-DfdXQKc';
 const PHOTO_FOLDER_ID = '1Pj5dm-XAkxxyXABj0ZdD4Qvu_5PoS5xv';
 
 function doGet() {
-  return json_({ok:true, service:'bzhv-tracker', version:4});
+  return json_({ok:true, service:'bzhv-tracker', version:5});
 }
 
 function doPost(e) {
@@ -14,6 +14,7 @@ function doPost(e) {
     if (action === 'analyze_manual') return analyzeManual_(body.meal_name || '', body.weight_g || 0);
     if (action === 'add_food') return addFood_(body.entry || {});
     if (action === 'update_food') return updateFood_(body.entry || {});
+    if (action === 'delete_food') return deleteFood_(body.id || '');
     if (action === 'save_settings') return saveSettings_(body.settings || {});
     if (action === 'list_food') return json_({ok:true, entries:listFood_()});
     if (action === 'get_settings') return json_({ok:true, settings:getSettings_()});
@@ -95,6 +96,42 @@ function updateFood_(x) {
 
     rebuildSummary_();
     return json_({ok:true,id:String(x.id),image_url:imageUrl});
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteFood_(id) {
+  id = String(id || '').trim();
+  if (!id) throw new Error('Food entry id is required');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sh = ss.getSheetByName('food_log');
+    if (!sh) throw new Error('Sheet food_log not found');
+
+    const lastRow = sh.getLastRow();
+    if (lastRow < 2) return json_({ok:true,deleted:false,id:id});
+
+    const ids = sh.getRange(2,1,lastRow-1,1).getDisplayValues().flat();
+    const found = ids.indexOf(id);
+    if (found < 0) return json_({ok:true,deleted:false,id:id});
+
+    const row = found + 2;
+    const imageUrl = String(sh.getRange(row,10).getDisplayValue() || '');
+    sh.deleteRow(row);
+
+    if (imageUrl) {
+      try {
+        const match = imageUrl.match(/\/d\/([A-Za-z0-9_-]+)/) || imageUrl.match(/[?&]id=([A-Za-z0-9_-]+)/);
+        if (match && match[1]) DriveApp.getFileById(match[1]).setTrashed(true);
+      } catch (_) {}
+    }
+
+    rebuildSummary_();
+    return json_({ok:true,deleted:true,id:id});
   } finally {
     lock.releaseLock();
   }
