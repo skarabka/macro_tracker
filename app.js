@@ -47,7 +47,7 @@ async function api(action,payload={}){
   const url = window.APP_CONFIG?.appsScriptUrl;
   if(!url) return {ok:false,offline:true,error:'Backend not configured'};
   const controller = new AbortController();
-  const timeout = setTimeout(()=>controller.abort(), 20000);
+  const timeout = setTimeout(()=>controller.abort(), 45000);
   try{
     const res = await fetch(url,{
       method:'POST',
@@ -131,6 +131,30 @@ async function compressImage(file, maxSide=1600, quality=.78){
   return canvas.toDataURL('image/jpeg',quality);
 }
 
+async function analyzeCurrentPhoto(){
+  if(!photoDataUrl || !hasBackend()) return;
+  const note=$('aiNote');
+  note.textContent='AI аналізує фото…';
+  try{
+    const r=await api('analyze_photo',{imageDataUrl:photoDataUrl,mode:$('inputType').value});
+    if(!r.ok) throw new Error(r.error||'AI analysis failed');
+    const a=r.analysis||{};
+    if(a.meal_name) $('mealName').value=a.meal_name;
+    if(Number(a.weight_g)>0) $('weightG').value=Math.round(Number(a.weight_g));
+    if(Number(a.kcal)>=0) $('kcal').value=Math.round(Number(a.kcal));
+    if(Number(a.protein_g)>=0) $('protein').value=Math.round(Number(a.protein_g)*10)/10;
+    if(Number(a.fat_g)>=0) $('fat').value=Math.round(Number(a.fat_g)*10)/10;
+    if(Number(a.carbs_g)>=0) $('carbs').value=Math.round(Number(a.carbs_g)*10)/10;
+    if(a.assumptions && !$('comment').value.trim()) $('comment').value=a.assumptions;
+    const confidence=Number(a.confidence);
+    const confidenceText=Number.isFinite(confidence)?` · впевненість ${Math.round(confidence*100)}%`:'';
+    note.textContent=`AI заповнив оцінку${confidenceText}. Перевір значення перед збереженням.`;
+  }catch(err){
+    console.warn(err);
+    note.textContent='AI-аналіз не вдався. Можна заповнити БЖВ вручну або спробувати інше фото.';
+  }
+}
+
 function render(){
   const entries = loadEntries().map(normalizeEntry).sort((a,b)=>new Date(b.datetime)-new Date(a.datetime));
   const s = loadSettings();
@@ -192,7 +216,7 @@ document.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',
   document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.dataset.screen===btn.dataset.target));
 }));
 document.querySelectorAll('.mode-tab').forEach(btn=>btn.addEventListener('click',()=>setMode(btn.dataset.mode)));
-$('openAdd').addEventListener('click',()=>{ $('foodForm').reset(); photoDataUrl=''; $('photoPreview').hidden=true; setMode('photo'); $('addDialog').showModal(); });
+$('openAdd').addEventListener('click',()=>{ $('foodForm').reset(); photoDataUrl=''; $('photoPreview').hidden=true; $('aiNote').textContent='Після фото AI запропонує назву, вагу, калорії та БЖВ. Перед збереженням усе можна змінити.'; setMode('photo'); $('addDialog').showModal(); });
 $('openSettings').addEventListener('click',()=>$('settingsDialog').showModal());
 $('retrySync').addEventListener('click',()=>bootstrapFromServer());
 
@@ -203,6 +227,7 @@ $('photoInput').addEventListener('change',async e=>{
     photoDataUrl=await compressImage(file);
     $('photoPreview').src=photoDataUrl; $('photoPreview').hidden=false;
     $('photoPrompt').textContent=$('inputType').value==='label'?'Замінити фото етикетки':'Замінити фото страви';
+    await analyzeCurrentPhoto();
   }catch(err){ alert('Не вдалося обробити фото. Спробуй інше.'); }
 });
 
