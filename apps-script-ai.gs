@@ -2,14 +2,15 @@ const SPREADSHEET_ID = '1-o6k-9UKY5vxI4Swmt6K4Ugj1ifE28-KWEU-DfdXQKc';
 const PHOTO_FOLDER_ID = '1Pj5dm-XAkxxyXABj0ZdD4Qvu_5PoS5xv';
 
 function doGet() {
-  return json_({ok:true, service:'bzhv-tracker', version:2});
+  return json_({ok:true, service:'bzhv-tracker', version:3});
 }
 
 function doPost(e) {
   try {
     const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     const action = body.action || '';
-    if (action === 'analyze_photo') return analyzePhoto_(body.imageDataUrl || '', body.mode || 'photo');
+    if (action === 'identify_photo') return identifyPhoto_(body.imageDataUrl || '', body.mode || 'photo');
+    if (action === 'analyze_photo') return identifyPhoto_(body.imageDataUrl || '', body.mode || 'photo');
     if (action === 'analyze_manual') return analyzeManual_(body.meal_name || '', body.weight_g || 0);
     if (action === 'add_food') return addFood_(body.entry || {});
     if (action === 'save_settings') return saveSettings_(body.settings || {});
@@ -123,7 +124,7 @@ function json_(obj){
 }
 
 
-function analyzePhoto_(imageDataUrl, mode) {
+function identifyPhoto_(imageDataUrl, mode) {
   const key = PropertiesService.getScriptProperties().getProperty('MACRO_TRACKER_API_KEY');
   if (!key) throw new Error('MACRO_TRACKER_API_KEY is not configured in Script Properties');
 
@@ -138,9 +139,9 @@ function analyzePhoto_(imageDataUrl, mode) {
 
   enforceAiDailyLimit_();
 
-  const photoInstruction = mode === 'label'
-    ? 'Read the nutrition label carefully. If values and serving size are clearly visible, return nutrition for one stated serving. If only per-100-g values are clear, set weight_g to 100 and return those values. Use the visible product name when possible. Do not invent unreadable numbers.'
-    : 'Analyze the visible meal. Estimate the total visible portion weight and nutrition for the whole visible portion. Account for likely cooking oil or sauce only when visually plausible. Do not pretend exact precision and do not invent ingredients that are not reasonably supported by the image.';
+  const instruction = mode === 'label'
+    ? 'Look at the product or nutrition label. Identify the product or food name. Suggest a practical default weight in grams: prefer a clearly stated serving size; if no serving size is visible, use a clearly visible net package weight; if neither is clear, estimate a common single portion. Do not calculate calories or macros.'
+    : 'Look at the meal photo. Identify the dish or main food and estimate the total visible portion weight in grams. Do not calculate calories or macros.';
 
   const schema = {
     type: 'object',
@@ -148,14 +149,10 @@ function analyzePhoto_(imageDataUrl, mode) {
     properties: {
       meal_name: { type: 'string' },
       weight_g: { type: 'number', minimum: 0 },
-      kcal: { type: 'number', minimum: 0 },
-      protein_g: { type: 'number', minimum: 0 },
-      fat_g: { type: 'number', minimum: 0 },
-      carbs_g: { type: 'number', minimum: 0 },
       confidence: { type: 'number', minimum: 0, maximum: 1 },
       assumptions: { type: 'string' }
     },
-    required: ['meal_name','weight_g','kcal','protein_g','fat_g','carbs_g','confidence','assumptions']
+    required: ['meal_name','weight_g','confidence','assumptions']
   };
 
   const payload = {
@@ -166,13 +163,13 @@ function analyzePhoto_(imageDataUrl, mode) {
         role: 'developer',
         content: [{
           type: 'input_text',
-          text: 'You estimate food nutrition from images for a personal macro tracker. Return a practical estimate, not a medical claim. Use Ukrainian for meal_name and assumptions. Keep assumptions concise. Calories and macros must describe the same portion and be internally plausible.'
+          text: 'You identify food from images for a personal macro tracker. Return only the requested identification fields. Use Ukrainian for meal_name and assumptions. Weight is an estimate and should be practical rather than falsely precise.'
         }]
       },
       {
         role: 'user',
         content: [
-          { type: 'input_text', text: photoInstruction },
+          { type: 'input_text', text: instruction },
           { type: 'input_image', image_url: imageDataUrl, detail: 'high' }
         ]
       }
@@ -180,7 +177,7 @@ function analyzePhoto_(imageDataUrl, mode) {
     text: {
       format: {
         type: 'json_schema',
-        name: 'nutrition_estimate',
+        name: 'food_identification',
         strict: true,
         schema: schema
       }
