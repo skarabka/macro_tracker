@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#101114" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Macro Tracker" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <title>Macro Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow" id="todayLabel"></div>
+        <h1>Macro Tracker</h1>
+      </div>
+      <div class="header-actions"><button class="sync-button" id="retrySync" type="button"><span class="sync-dot"></span><span id="syncStatus">Локальний режим</span></button><button class="icon-btn" id="openSettings" aria-label="Налаштування">⚙️</button></div>
+    </header>
+
+    <main>
+      <section class="screen active" data-screen="today">
+        <div class="hero-card">
+          <div class="hero-head">
+            <div>
+              <span class="muted">Калорії сьогодні</span>
+              <div class="hero-value"><span id="kcalNow">0</span><small> / <span id="kcalTarget">—</span> kcal</small></div>
+            </div>
+            <div class="ring" id="kcalRing"><span id="kcalPct">0%</span></div>
+          </div>
+          <div class="progress"><div id="kcalBar"></div></div>
+        </div>
+
+        <div class="macro-grid">
+          <article class="macro-card">
+            <div class="macro-title"><span>Білки</span><strong><span id="proteinNow">0</span> / <span id="proteinTarget">—</span> г</strong></div>
+            <div class="progress small"><div id="proteinBar"></div></div>
+          </article>
+          <article class="macro-card">
+            <div class="macro-title"><span>Жири</span><strong><span id="fatNow">0</span> / <span id="fatTarget">—</span> г</strong></div>
+            <div class="progress small"><div id="fatBar"></div></div>
+          </article>
+          <article class="macro-card">
+            <div class="macro-title"><span>Вуглеводи</span><strong><span id="carbsNow">0</span> / <span id="carbsTarget">—</span> г</strong></div>
+            <div class="progress small"><div id="carbsBar"></div></div>
+          </article>
+        </div>
+
+        <button class="primary add-food" id="openAdd">＋ Додати їжу</button>
+
+        <section class="section-block">
+          <div class="section-title-row"><h2>Сьогодні</h2><span class="muted" id="todayCount">0 записів</span></div>
+          <div id="todayList" class="food-list empty-state">Поки нічого не додано.</div>
+        </section>
+      </section>
+
+      <section class="screen" data-screen="history">
+        <div class="section-title-row"><h2>Історія</h2><button class="text-btn" id="clearDemo">Очистити локальні</button></div>
+        <div id="historyList" class="food-list empty-state">Немає записів.</div>
+      </section>
+
+      <section class="screen" data-screen="stats">
+        <div class="section-title-row"><h2>Останні 7 днів</h2><span class="muted" id="weekAvg">—</span></div>
+        <div class="stat-cards">
+          <article><span>Середні kcal</span><strong id="avgKcal">0</strong></article>
+          <article><span>Білки</span><strong><span id="avgProtein">0</span> г</strong></article>
+          <article><span>Жири</span><strong><span id="avgFat">0</span> г</strong></article>
+          <article><span>Вуглеводи</span><strong><span id="avgCarbs">0</span> г</strong></article>
+        </div>
+        <div class="chart-card">
+          <h3>Калорії по днях</h3>
+          <div id="weekChart" class="week-chart"></div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-target="today"><span>⌂</span>Сьогодні</button>
+      <button class="nav-btn" data-target="history"><span>◷</span>Історія</button>
+      <button class="nav-btn" data-target="stats"><span>▥</span>Статистика</button>
+    </nav>
+  </div>
+
+  <dialog id="addDialog" class="sheet-dialog">
+    <form method="dialog" id="foodForm">
+      <div class="dialog-handle"></div>
+      <div class="section-title-row"><h2>Додати їжу</h2><button class="icon-btn" value="cancel">✕</button></div>
+      <div class="mode-tabs">
+        <button type="button" class="mode-tab active" data-mode="photo">📷 Фото</button>
+        <button type="button" class="mode-tab" data-mode="label">🏷️ Етикетка</button>
+        <button type="button" class="mode-tab" data-mode="manual">✏️ Вручну</button>
+      </div>
+
+      <input id="inputType" type="hidden" value="photo" />
+      <div id="photoBlock" class="photo-block">
+        <label class="photo-picker">
+          <input type="file" id="photoInput" accept="image/*" capture="environment" />
+          <span>📷</span>
+          <b id="photoPrompt">Сфотографувати страву</b>
+          <small>Фото можна замінити перед збереженням</small>
+        </label>
+        <img id="photoPreview" alt="Попередній перегляд" hidden />
+        <div class="ai-note">Фото стискається перед відправкою. На цьому етапі БЖВ вводиться або коригується вручну; AI-розпізнавання підключимо наступним модулем.</div>
+      </div>
+
+      <label>Назва<input id="mealName" required placeholder="Напр. омлет з овочами" /></label>
+      <label>Вага, г<input id="weightG" inputmode="decimal" type="number" min="0" step="1" placeholder="250" /></label>
+      <div class="field-grid">
+        <label>kcal<input id="kcal" inputmode="decimal" type="number" min="0" step="1" required /></label>
+        <label>Білки, г<input id="protein" inputmode="decimal" type="number" min="0" step="0.1" required /></label>
+        <label>Жири, г<input id="fat" inputmode="decimal" type="number" min="0" step="0.1" required /></label>
+        <label>Вуглеводи, г<input id="carbs" inputmode="decimal" type="number" min="0" step="0.1" required /></label>
+      </div>
+      <label>Коментар<input id="comment" placeholder="Необов’язково" /></label>
+      <button class="primary" id="saveFood" value="default">Зберегти</button>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="sheet-dialog">
+    <form method="dialog" id="settingsForm">
+      <div class="dialog-handle"></div>
+      <div class="section-title-row"><h2>Денні норми</h2><button class="icon-btn" value="cancel">✕</button></div>
+      <label>Калорії, kcal<input id="setKcal" inputmode="numeric" type="number" min="1" required /></label>
+      <label>Білки, г<input id="setProtein" inputmode="numeric" type="number" min="1" required /></label>
+      <label>Жири, г<input id="setFat" inputmode="numeric" type="number" min="1" required /></label>
+      <label>Вуглеводи, г<input id="setCarbs" inputmode="numeric" type="number" min="1" required /></label>
+      <button class="primary" value="default">Зберегти норми</button>
+      <p class="sync-note" id="syncNote">Google Sheets: локальний режим</p>
+    </form>
+  </dialog>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
