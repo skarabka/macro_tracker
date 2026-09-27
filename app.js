@@ -218,6 +218,8 @@ document.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',
 document.querySelectorAll('.mode-tab').forEach(btn=>btn.addEventListener('click',()=>setMode(btn.dataset.mode)));
 $('openAdd').addEventListener('click',()=>{ $('foodForm').reset(); photoDataUrl=''; $('photoPreview').hidden=true; $('aiNote').textContent='Після фото AI запропонує назву, вагу, калорії та БЖВ. Перед збереженням усе можна змінити.'; setMode('photo'); $('addDialog').showModal(); });
 $('openSettings').addEventListener('click',()=>$('settingsDialog').showModal());
+$('closeAdd').addEventListener('click',()=>$('addDialog').close());
+$('closeSettings').addEventListener('click',()=>$('settingsDialog').close());
 $('retrySync').addEventListener('click',()=>bootstrapFromServer());
 
 $('photoInput').addEventListener('change',async e=>{
