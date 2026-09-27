@@ -7,6 +7,7 @@ let photoDataUrl = '';
 let syncing = false;
 let nutritionCalculated = false;
 let photoIdentified = false;
+let editingEntryId = null;
 
 function loadJson(key, fallback){
   try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
@@ -111,7 +112,7 @@ async function flushPending(){
     try{
       const r=await api(item.action,item.payload);
       if(!r.ok) throw new Error(r.error||'Sync failed');
-      if(item.action==='add_food' && item.payload?.entry?.id){
+      if((item.action==='add_food' || item.action==='update_food') && item.payload?.entry?.id){
         const entries=loadEntries();
         const i=entries.findIndex(x=>x.id===item.payload.entry.id);
         if(i>=0){ entries[i].sync_status='synced'; if(r.image_url) entries[i].image_url=r.image_url; saveEntries(entries); }
@@ -265,7 +266,7 @@ function render(){
 
 function foodCard(x){
   const pending=x.sync_status==='pending'?'<span class="sync-chip">очікує синхронізації</span>':'';
-  return `<article class="food-item">
+  return `<article class="food-item" data-entry-id="${esc(x.id)}" role="button" tabindex="0" aria-label="Редагувати ${esc(x.meal_name)}">
     <div><div class="name">${esc(x.meal_name)}</div><div class="meta">${fmtDate(x.datetime)} · ${fmtTime(x.datetime)} · ${esc(x.input_type)} ${pending}</div></div>
     <div class="kcal">${Math.round(x.kcal)} kcal</div>
     <div class="macros"><span class="pill">Б ${x.protein} г</span><span class="pill">Ж ${x.fat} г</span><span class="pill">В ${x.carbs} г</span>${x.weight_g?`<span class="pill">${x.weight_g} г</span>`:''}</div>
@@ -319,6 +320,39 @@ function renderWeek(entries,s){
   renderMetricChart(days,'carbs',s.carbs,'carbsChart','carbsChartTarget','г');
 }
 
+function openEditEntry(id){
+  const entry=loadEntries().map(normalizeEntry).find(x=>x.id===id);
+  if(!entry) return;
+
+  editingEntryId=entry.id;
+  photoDataUrl='';
+  photoIdentified=true;
+  nutritionCalculated=true;
+
+  $('foodForm').reset();
+  $('foodDialogTitle').textContent='Редагувати їжу';
+  $('modeTabs').hidden=true;
+  $('inputType').value=entry.input_type || 'manual';
+  $('photoBlock').style.display='none';
+  $('photoPreview').hidden=true;
+
+  $('mealName').value=entry.meal_name;
+  $('weightG').value=entry.weight_g || '';
+  $('kcal').value=entry.kcal;
+  $('protein').value=entry.protein;
+  $('fat').value=entry.fat;
+  $('carbs').value=entry.carbs;
+  $('comment').value=entry.comment || '';
+
+  $('nutritionFields').hidden=false;
+  $('calculateFood').hidden=false;
+  $('calculateNote').hidden=false;
+  $('calculateNote').textContent='Зміни вагу або назву й натисни «Порахувати», щоб AI оновив kcal та БЖВ.';
+  $('saveFood').hidden=false;
+  $('saveFood').textContent='Підтвердити';
+  $('addDialog').showModal();
+}
+
 function setMode(mode){
   $('inputType').value=mode;
   document.querySelectorAll('.mode-tab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
@@ -350,12 +384,23 @@ document.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',
   document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.dataset.screen===btn.dataset.target));
 }));
 document.querySelectorAll('.mode-tab').forEach(btn=>btn.addEventListener('click',()=>setMode(btn.dataset.mode)));
-$('openAdd').addEventListener('click',()=>{ $('foodForm').reset(); photoDataUrl=''; photoIdentified=false; nutritionCalculated=false; $('photoPreview').hidden=true; $('aiNote').textContent='Після фото AI визначить назву та запропонує вагу.'; setMode('photo'); $('addDialog').showModal(); });
+$('openAdd').addEventListener('click',()=>{ editingEntryId=null; $('foodForm').reset(); photoDataUrl=''; photoIdentified=false; nutritionCalculated=false; $('foodDialogTitle').textContent='Додати їжу'; $('modeTabs').hidden=false; $('photoPreview').hidden=true; $('aiNote').textContent='Після фото AI визначить назву та запропонує вагу.'; setMode('photo'); $('addDialog').showModal(); });
 $('openSettings').addEventListener('click',()=>$('settingsDialog').showModal());
 $('closeAdd').addEventListener('click',()=>$('addDialog').close());
 $('closeSettings').addEventListener('click',()=>$('settingsDialog').close());
 $('retrySync').addEventListener('click',()=>bootstrapFromServer());
 $('calculateFood').addEventListener('click',()=>calculateNutrition());
+document.addEventListener('click',e=>{
+  const card=e.target.closest('.food-item[data-entry-id]');
+  if(card) openEditEntry(card.dataset.entryId);
+});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter' && e.key!==' ') return;
+  const card=e.target.closest('.food-item[data-entry-id]');
+  if(!card) return;
+  e.preventDefault();
+  openEditEntry(card.dataset.entryId);
+});
 ['mealName','weightG'].forEach(id=>$(id).addEventListener('input',()=>{
   if(nutritionCalculated) clearNutritionEstimate();
   updateCalculateState();
@@ -379,14 +424,35 @@ $('foodForm').addEventListener('submit',async e=>{
     return;
   }
   const now=new Date();
+  const entries=loadEntries();
+  const existing=editingEntryId ? entries.map(normalizeEntry).find(x=>x.id===editingEntryId) : null;
   const entry={
-    id:crypto.randomUUID?crypto.randomUUID():String(Date.now()), datetime:now.toISOString(), date:dayKey(now),
-    meal_name:$('mealName').value.trim(), input_type:$('inputType').value, weight_g:Number($('weightG').value)||0,
-    kcal:Number($('kcal').value)||0, protein:Number($('protein').value)||0, fat:Number($('fat').value)||0, carbs:Number($('carbs').value)||0,
-    comment:$('comment').value.trim(), imageDataUrl:photoDataUrl||'', sync_status:hasBackend()?'pending':'local'
+    id:existing?.id || (crypto.randomUUID?crypto.randomUUID():String(Date.now())),
+    datetime:existing?.datetime || now.toISOString(),
+    date:existing?.date || dayKey(now),
+    meal_name:$('mealName').value.trim(),
+    input_type:existing?.input_type || $('inputType').value,
+    weight_g:Number($('weightG').value)||0,
+    kcal:Number($('kcal').value)||0,
+    protein:Number($('protein').value)||0,
+    fat:Number($('fat').value)||0,
+    carbs:Number($('carbs').value)||0,
+    comment:$('comment').value.trim(),
+    imageDataUrl:existing ? '' : (photoDataUrl||''),
+    image_url:existing?.image_url || '',
+    sync_status:hasBackend()?'pending':'local'
   };
-  const entries=loadEntries(); entries.push({...entry,imageDataUrl:''}); saveEntries(entries);
-  if(hasBackend()) queueAction('add_food',{entry});
+
+  if(existing){
+    const i=entries.findIndex(x=>String(x.id)===existing.id);
+    if(i>=0) entries[i]={...entry,imageDataUrl:''};
+    if(hasBackend()) queueAction('update_food',{entry});
+  }else{
+    entries.push({...entry,imageDataUrl:''});
+    if(hasBackend()) queueAction('add_food',{entry});
+  }
+  saveEntries(entries);
+  editingEntryId=null;
   render(); $('addDialog').close();
   await flushPending();
 });
