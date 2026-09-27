@@ -33,3 +33,5 @@ h2{font-size:20px;margin:0}h3{margin:0 0 18px;font-size:16px}
 .calculate-food{margin:6px 0 10px}.calculate-food:disabled{opacity:.6;cursor:default}#manualAiNote{margin:0 0 10px}
 
 .food-item[data-entry-id]{cursor:pointer;transition:border-color .15s ease,transform .15s ease}.food-item[data-entry-id]:hover{border-color:#4b5059}.food-item[data-entry-id]:active{transform:scale(.99)}.food-item[data-entry-id]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.danger-btn{width:100%;margin-top:10px;border:1px solid rgba(255,114,114,.45);border-radius:16px;background:transparent;color:var(--danger);padding:14px 18px;font-weight:700;font-size:15px}.danger-btn:active{background:rgba(255,114,114,.08)}
