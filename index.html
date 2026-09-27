@@ -87,7 +87,7 @@
   <dialog id="addDialog" class="sheet-dialog">
     <form method="dialog" id="foodForm">
       <div class="dialog-handle"></div>
-      <div class="section-title-row"><h2>Додати їжу</h2><button class="icon-btn" value="cancel">✕</button></div>
+      <div class="section-title-row"><h2>Додати їжу</h2><button class="icon-btn" id="closeAdd" type="button" aria-label="Закрити">✕</button></div>
       <div class="mode-tabs">
         <button type="button" class="mode-tab active" data-mode="photo">📷 Фото</button>
         <button type="button" class="mode-tab" data-mode="label">🏷️ Етикетка</button>
@@ -122,7 +122,7 @@
   <dialog id="settingsDialog" class="sheet-dialog">
     <form method="dialog" id="settingsForm">
       <div class="dialog-handle"></div>
-      <div class="section-title-row"><h2>Денні норми</h2><button class="icon-btn" value="cancel">✕</button></div>
+      <div class="section-title-row"><h2>Денні норми</h2><button class="icon-btn" id="closeSettings" type="button" aria-label="Закрити">✕</button></div>
       <label>Калорії, kcal<input id="setKcal" inputmode="numeric" type="number" min="1" required /></label>
       <label>Білки, г<input id="setProtein" inputmode="numeric" type="number" min="1" required /></label>
       <label>Жири, г<input id="setFat" inputmode="numeric" type="number" min="1" required /></label>
