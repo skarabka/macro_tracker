@@ -272,16 +272,51 @@ function foodCard(x){
   </article>`;
 }
 
+function renderMetricChart(days,key,target,chartId,targetLabelId,unit){
+  const values=days.map(d=>Number(d[key])||0);
+  const safeTarget=Number(target)||0;
+  const max=Math.max(safeTarget,...values,1)*1.12;
+  const targetHeight=safeTarget>0?Math.min(100,safeTarget/max*100):0;
+
+  $(targetLabelId).textContent=safeTarget?`норма ${safeTarget} ${unit}`:'норму не задано';
+
+  const bars=days.map(d=>{
+    const value=Number(d[key])||0;
+    const barHeight=Math.max(value>0?2:0,Math.min(100,value/max*100));
+    const percent=safeTarget>0?Math.round(value/safeTarget*100):null;
+    const percentLabel=percent===null?'—':`${percent}%`;
+    const day=d.date.toLocaleDateString('uk-UA',{weekday:'short'}).replace('.','');
+    const title=`${Math.round(value*10)/10} ${unit}${safeTarget?` · ${percentLabel} від норми`:''}`;
+    return `<div class="metric-col" style="--bar-h:${barHeight}%"><span class="metric-percent">${percentLabel}</span><div class="metric-bar" title="${title}"></div></div>`;
+  }).join('');
+
+  const daysAxis=days.map(d=>`<span>${d.date.toLocaleDateString('uk-UA',{weekday:'short'}).replace('.','')}</span>`).join('');
+  const line=safeTarget?`<div class="target-line" style="--target-h:${targetHeight}%"></div>`:'';
+
+  $(chartId).innerHTML=`<div class="metric-bars-area">${line}<div class="metric-bars">${bars}</div></div><div class="metric-axis">${daysAxis}</div>`;
+}
+
 function renderWeek(entries,s){
   const days=[]; const now=new Date();
-  for(let i=6;i>=0;i--){ const d=new Date(now); d.setHours(0,0,0,0); d.setDate(now.getDate()-i); const k=dayKey(d); const items=entries.filter(x=>x.date===k); days.push({date:d,kcal:sum(items,'kcal'),protein:sum(items,'protein'),fat:sum(items,'fat'),carbs:sum(items,'carbs')}); }
+  for(let i=6;i>=0;i--){
+    const d=new Date(now); d.setHours(0,0,0,0); d.setDate(now.getDate()-i);
+    const k=dayKey(d); const items=entries.filter(x=>x.date===k);
+    days.push({date:d,kcal:sum(items,'kcal'),protein:sum(items,'protein'),fat:sum(items,'fat'),carbs:sum(items,'carbs')});
+  }
+
   const activeDays=days.filter(d=>d.kcal>0);
   const divisor=activeDays.length||7;
   const avg=(key)=>Math.round(days.reduce((a,d)=>a+d[key],0)/divisor);
-  $('avgKcal').textContent=avg('kcal'); $('avgProtein').textContent=avg('protein'); $('avgFat').textContent=avg('fat'); $('avgCarbs').textContent=avg('carbs');
+  $('avgKcal').textContent=avg('kcal');
+  $('avgProtein').textContent=avg('protein');
+  $('avgFat').textContent=avg('fat');
+  $('avgCarbs').textContent=avg('carbs');
   $('weekAvg').textContent=s.kcal?`норма ${s.kcal} kcal`:'денну норму не задано';
-  const max=Math.max(s.kcal||0,...days.map(d=>d.kcal),1);
-  $('weekChart').innerHTML=days.map(d=>`<div class="bar-wrap"><div class="bar" style="height:${Math.max(2,d.kcal/max*160)}px" title="${Math.round(d.kcal)} kcal"></div><small>${d.date.toLocaleDateString('uk-UA',{weekday:'short'}).replace('.','')}</small></div>`).join('');
+
+  renderMetricChart(days,'kcal',s.kcal,'kcalChart','kcalChartTarget','kcal');
+  renderMetricChart(days,'protein',s.protein,'proteinChart','proteinChartTarget','г');
+  renderMetricChart(days,'fat',s.fat,'fatChart','fatChartTarget','г');
+  renderMetricChart(days,'carbs',s.carbs,'carbsChart','carbsChartTarget','г');
 }
 
 function setMode(mode){
