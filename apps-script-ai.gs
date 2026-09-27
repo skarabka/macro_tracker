@@ -2,7 +2,7 @@ const SPREADSHEET_ID = '1-o6k-9UKY5vxI4Swmt6K4Ugj1ifE28-KWEU-DfdXQKc';
 const PHOTO_FOLDER_ID = '1Pj5dm-XAkxxyXABj0ZdD4Qvu_5PoS5xv';
 
 function doGet() {
-  return json_({ok:true, service:'bzhv-tracker', version:3});
+  return json_({ok:true, service:'bzhv-tracker', version:4});
 }
 
 function doPost(e) {
@@ -13,6 +13,7 @@ function doPost(e) {
     if (action === 'analyze_photo') return identifyPhoto_(body.imageDataUrl || '', body.mode || 'photo');
     if (action === 'analyze_manual') return analyzeManual_(body.meal_name || '', body.weight_g || 0);
     if (action === 'add_food') return addFood_(body.entry || {});
+    if (action === 'update_food') return updateFood_(body.entry || {});
     if (action === 'save_settings') return saveSettings_(body.settings || {});
     if (action === 'list_food') return json_({ok:true, entries:listFood_()});
     if (action === 'get_settings') return json_({ok:true, settings:getSettings_()});
@@ -53,6 +54,50 @@ function addFood_(x) {
     rebuildSummary_();
     return json_({ok:true,id:String(x.id),image_url:imageUrl});
   } finally { lock.releaseLock(); }
+}
+
+function updateFood_(x) {
+  if (!x.id) throw new Error('Food entry id is required');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sh = ss.getSheetByName('food_log');
+    if (!sh) throw new Error('Sheet food_log not found');
+
+    const lastRow = sh.getLastRow();
+    if (lastRow < 2) throw new Error('Food entry not found');
+
+    const ids = sh.getRange(2,1,lastRow-1,1).getDisplayValues().flat();
+    const found = ids.indexOf(String(x.id));
+    if (found < 0) throw new Error('Food entry not found');
+
+    const row = found + 2;
+    const current = sh.getRange(row,1,1,11).getValues()[0];
+    let imageUrl = String(current[9] || '');
+    if (x.imageDataUrl) imageUrl = saveImage_(x.imageDataUrl, x.id);
+
+    const dt = x.datetime ? new Date(x.datetime) : (current[1] instanceof Date ? current[1] : new Date());
+    sh.getRange(row,1,1,11).setValues([[
+      String(x.id),
+      dt,
+      String(x.meal_name || ''),
+      String(x.input_type || current[3] || 'manual'),
+      Number(x.weight_g)||0,
+      Number(x.kcal)||0,
+      Number(x.protein)||0,
+      Number(x.fat)||0,
+      Number(x.carbs)||0,
+      imageUrl,
+      String(x.comment || '')
+    ]]);
+
+    rebuildSummary_();
+    return json_({ok:true,id:String(x.id),image_url:imageUrl});
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function saveSettings_(s) {
