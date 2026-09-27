@@ -10,6 +10,7 @@ function doPost(e) {
     const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     const action = body.action || '';
     if (action === 'analyze_photo') return analyzePhoto_(body.imageDataUrl || '', body.mode || 'photo');
+    if (action === 'analyze_manual') return analyzeManual_(body.meal_name || '', body.weight_g || 0);
     if (action === 'add_food') return addFood_(body.entry || {});
     if (action === 'save_settings') return saveSettings_(body.settings || {});
     if (action === 'list_food') return json_({ok:true, entries:listFood_()});
@@ -243,4 +244,98 @@ function enforceAiDailyLimit_() {
   } finally {
     lock.releaseLock();
   }
+}
+
+
+function analyzeManual_(mealName, weightG) {
+  const key = PropertiesService.getScriptProperties().getProperty('MACRO_TRACKER_API_KEY');
+  if (!key) throw new Error('MACRO_TRACKER_API_KEY is not configured in Script Properties');
+
+  mealName = String(mealName || '').trim();
+  weightG = Number(weightG);
+  if (!mealName) throw new Error('Meal name is required');
+  if (!isFinite(weightG) || weightG <= 0 || weightG > 5000) throw new Error('Weight must be between 1 and 5000 g');
+
+  enforceAiDailyLimit_();
+
+  const schema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      meal_name: { type: 'string' },
+      weight_g: { type: 'number', minimum: 0 },
+      kcal: { type: 'number', minimum: 0 },
+      protein_g: { type: 'number', minimum: 0 },
+      fat_g: { type: 'number', minimum: 0 },
+      carbs_g: { type: 'number', minimum: 0 },
+      confidence: { type: 'number', minimum: 0, maximum: 1 },
+      assumptions: { type: 'string' }
+    },
+    required: ['meal_name','weight_g','kcal','protein_g','fat_g','carbs_g','confidence','assumptions']
+  };
+
+  const payload = {
+    model: 'gpt-5.6-terra',
+    store: false,
+    reasoning: { effort: 'low' },
+    input: [
+      {
+        role: 'developer',
+        content: [{
+          type: 'input_text',
+          text: 'You estimate nutrition for a personal macro tracker. Use typical nutritional values for the named food or dish. Return a practical estimate, not a medical claim. Use Ukrainian for meal_name and assumptions. Calories and macros must describe the same requested portion. If preparation or brand is unspecified, use a common average preparation and state the assumption briefly.'
+        }]
+      },
+      {
+        role: 'user',
+        content: [{
+          type: 'input_text',
+          text: 'Estimate nutrition for exactly ' + weightG + ' g of: ' + mealName + '. Keep weight_g equal to ' + weightG + '.'
+        }]
+      }
+    ],
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'nutrition_estimate',
+        strict: true,
+        schema: schema
+      }
+    }
+  };
+
+  const response = UrlFetchApp.fetch('https://api.openai.com/v1/responses', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + key },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+
+  const status = response.getResponseCode();
+  const raw = response.getContentText();
+  if (status < 200 || status >= 300) {
+    let detail = raw;
+    try {
+      const parsedError = JSON.parse(raw);
+      detail = parsedError && parsedError.error && parsedError.error.message ? parsedError.error.message : raw;
+    } catch (_) {}
+    throw new Error('OpenAI API: ' + status + ' — ' + detail);
+  }
+
+  const parsed = JSON.parse(raw);
+  let outputText = parsed.output_text || '';
+  if (!outputText && Array.isArray(parsed.output)) {
+    parsed.output.forEach(item => {
+      if (!item || !Array.isArray(item.content)) return;
+      item.content.forEach(part => {
+        if (part && part.type === 'output_text' && part.text) outputText += part.text;
+      });
+    });
+  }
+  if (!outputText) throw new Error('OpenAI returned no structured result');
+
+  const analysis = JSON.parse(outputText);
+  analysis.weight_g = weightG;
+  return json_({ ok: true, analysis: analysis, model: parsed.model || 'gpt-5.6-terra' });
 }
