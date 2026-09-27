@@ -151,7 +151,7 @@ async function analyzeCurrentPhoto(){
     note.textContent=`AI заповнив оцінку${confidenceText}. Перевір значення перед збереженням.`;
   }catch(err){
     console.warn(err);
-    note.textContent='AI-аналіз не вдався. Можна заповнити БЖВ вручну або спробувати інше фото.';
+    note.textContent=`AI-аналіз не вдався: ${err.message || err}. Можна заповнити БЖВ вручну.`;
   }
 }
 
