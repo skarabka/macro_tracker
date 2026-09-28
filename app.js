@@ -251,7 +251,12 @@ function render(){
     $(k+'Target').textContent = s[k] || '—';
     const p = pct(totals[k],s[k]);
     $(k+'Bar').style.width = p+'%';
-    if(k==='kcal'){ $('kcalPct').textContent=s.kcal?p+'%':'—'; $('kcalRing').style.background=`conic-gradient(var(--accent) ${p*3.6}deg,#2a2d33 0deg)`; }
+    if(k==='kcal'){
+      $('kcalPct').textContent=s.kcal?p+'%':'—';
+      $('kcalRing').style.background=`conic-gradient(var(--accent) ${p*3.6}deg,#2a2d33 0deg)`;
+    }else{
+      $(k+'Pct').textContent=s[k]?Math.round(totals[k]/s[k]*100)+'%':'—';
+    }
   });
   $('todayCount').textContent = `${today.length} запис${today.length===1?'':today.length<5?'и':'ів'}`;
   $('todayList').className='food-list'+(today.length?'':' empty-state');
