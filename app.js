@@ -239,6 +239,33 @@ async function identifyCurrentPhoto(){
   }
 }
 
+function renderDailyProgressSegments(items,key,target,elementId){
+  const el=$(elementId);
+  if(!el) return;
+
+  const safeTarget=Number(target)||0;
+  const total=sum(items,key);
+  const consumedPct=safeTarget>0?Math.min(100,total/safeTarget*100):0;
+  el.style.width=consumedPct+'%';
+
+  const ordered=[...items].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
+  const positive=ordered.filter(x=>(Number(x[key])||0)>0);
+  if(!positive.length || total<=0){
+    el.innerHTML='';
+    return;
+  }
+
+  const unit=key==='kcal'?'kcal':'г';
+  el.innerHTML=positive.map((item,index)=>{
+    const value=Number(item[key])||0;
+    const share=value/total*100;
+    const targetPct=safeTarget>0?Math.round(value/safeTarget*100):null;
+    const valueLabel=Math.round(value*10)/10;
+    const title=`${esc(item.meal_name)} · ${valueLabel} ${unit}${targetPct===null?'':` · ${targetPct}% норми`}`;
+    return `<span class="progress-segment" style="width:${share}%" title="${title}" aria-label="${title}"></span>`;
+  }).join('');
+}
+
 function render(){
   const entries = loadEntries().map(normalizeEntry).sort((a,b)=>new Date(b.datetime)-new Date(a.datetime));
   const s = loadSettings();
@@ -250,7 +277,7 @@ function render(){
     $(k+'Now').textContent = Math.round(totals[k]*10)/10;
     $(k+'Target').textContent = s[k] || '—';
     const p = pct(totals[k],s[k]);
-    $(k+'Bar').style.width = p+'%';
+    renderDailyProgressSegments(today,k,s[k],k+'Bar');
     if(k==='kcal'){
       $('kcalPct').textContent=s.kcal?p+'%':'—';
       $('kcalRing').style.background=`conic-gradient(var(--accent) ${p*3.6}deg,#2a2d33 0deg)`;
